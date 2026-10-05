@@ -1,0 +1,9 @@
+# local data, logs and secrets
+instance/
+logs/
+*.db
+*.log
+.env
+__pycache__/
+.venv/
+venv/

@@ -6,6 +6,7 @@ import logging
 import json
 import threading
 import hashlib
+import secrets
 from datetime import datetime, timezone, timedelta
 from functools import wraps, lru_cache
 from logging.handlers import RotatingFileHandler
@@ -112,7 +113,7 @@ def min_filter(a, b):
     return min(a, b)
 
 
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY') or secrets.token_hex(32)
 # SQLite DB inside instance folder
 os.makedirs(app.instance_path, exist_ok=True)
 db_path = os.path.join(app.instance_path, 'truthguard.db')
@@ -1495,7 +1496,7 @@ def delete_analysis(analysis_id):
 @app.route('/api/health')
 def health_check():
     try:
-        db.session.execute('SELECT 1')
+        db.session.execute(text('SELECT 1'))
         db_status = 'healthy'
     except Exception:
         db_status = 'unhealthy'
@@ -1539,6 +1540,15 @@ def test_gemini():
 
 
 # --- INITIALIZE DATABASE ---
+def _initial_admin_password():
+    """Password for the first admin account: ADMIN_PASSWORD from .env, or a random one shown once."""
+    password = os.getenv('ADMIN_PASSWORD')
+    if not password:
+        password = secrets.token_urlsafe(12)
+        print(f"Created admin@truthguard.com with temporary password: {password}  (set ADMIN_PASSWORD in .env to choose one)")
+    return password
+
+
 def init_database():
     with app.app_context():
         try:
@@ -1552,7 +1562,7 @@ def init_database():
                 admin = User(
                     email=admin_email,
                     name='System Administrator',
-                    password=generate_password_hash('Admin123!', method='pbkdf2:sha256'),
+                    password=generate_password_hash(_initial_admin_password(), method='pbkdf2:sha256'),
                     role='admin',
                     is_active=True
                 )
@@ -1599,4 +1609,4 @@ if __name__ == '__main__':
     app.logger.info('✓ Background database saving enabled')
     app.logger.info('Server ready for immediate response analysis!')
 
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=os.getenv('FLASK_DEBUG') == '1', host=os.getenv('HOST', '127.0.0.1'), port=int(os.getenv('PORT', '5000')))
